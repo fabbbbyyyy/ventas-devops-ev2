@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
 
-# Definiadsmos aalaaa URL del Registry como una variable de entorno global
+# Definiadsmos aalaaa URasdasdL del Registry como una variable de entorno global
 env:
   REGISTRY_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
