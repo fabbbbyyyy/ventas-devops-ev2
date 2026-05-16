@@ -5,7 +5,7 @@ COPY pom.xml .
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Etapa 2: Crear la imagen final y ligera para producción
+# Etapa 2:asdasd Crear la imagen final y ligera para producción
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 # TIP: Usar *.jar evita que tengas que cambiar el Dockerfile si cambia la versión en tu pom.xm l
