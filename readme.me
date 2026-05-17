@@ -1,205 +1,77 @@
-# API REST de Ventas
+# Flujo CI/CD
 
-Este proyecto es una API REST desarrollada con **Spring Boot 3** para gestionar ventas.
-Permite crear, consultar, actualizar y eliminar ventas, con persistencia en base de datos y documentación OpenAPI/Swagger.
+Este repositorio usa el workflow **`.github/workflows/main.yml`** para construir, publicar y desplegar la aplicación automáticamente.
 
-## 1) Tecnologías utilizadas
+## Disparador
 
-- Java 17
-- Spring Boot 3.4.x
-- Spring Web
-- Spring Data JPA
-- Spring Validation
-- MySQL (entorno principal)
-- H2 (tests)
-- Springdoc OpenAPI (Swagger UI)
-- Maven
-- Docker (multi-stage build)
-- GitHub Actions + AWS (ECR/EC2/SSM para despliegue)
+El pipeline se ejecuta cuando hay `push` a la rama:
 
-## 2) Estructura del proyecto
+- `main`
 
-- `src/main/java/com/citt/controller/VentaController.java`  
-  Expone los endpoints REST en `/api/v1/ventas`.
-- `src/main/java/com/citt/persistence/entity/Venta.java`  
-  Entidad JPA `Venta` con validaciones.
-- `src/main/java/com/citt/persistence/repository/VentaRepository.java`  
-  Repositorio JPA.
-- `src/main/java/com/citt/persistence/services/*`  
-  Lógica de negocio de ventas.
-- `src/main/java/com/citt/exceptions/*`  
-  Excepción personalizada y handler global de errores.
-- `src/main/java/com/citt/config/OpenApiConfing.java`  
-  Configuración de metadatos OpenAPI.
-- `src/main/resources/application.properties`  
-  Configuración principal (MySQL vía variables de entorno).
-- `.github/workflows/main.yml`  
-  Pipeline CI/CD para build, push a ECR y despliegue en EC2 por SSM.
-- `Dockerfile`  
-  Construcción de imagen de la app.
+## Variables y secretos requeridos
 
-## 3) Modelo de datos
+### Variables derivadas
 
-Entidad `Venta`:
+- `REGISTRY_URL = <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com`
 
-- `idVenta` (Long, autogenerado)
-- `direccionCompra` (String, obligatorio)
-- `valorCompra` (int)
-- `fechaCompra` (LocalDate, obligatoria)
-- `despachoGenerado` (Boolean, obligatorio)
+### Secrets usados en GitHub Actions
 
-## 4) Flujo de funcionamiento
-
-1. El cliente consume endpoints REST en `/api/v1/ventas`.
-2. `VentaController` valida y delega al servicio.
-3. `VentaServiceImpl` aplica la lógica de negocio.
-4. `VentaRepository` persiste/consulta en BD con JPA.
-5. Si no existe una venta, se lanza `VentaNotFoundException`.
-6. `RestResponseEntityExceptionHandler` responde con `404` y mensaje estructurado.
-
-## 5) Endpoints disponibles
-
-Base URL: `http://localhost:8080/api/v1/ventas`
-
-- `POST /` Crear venta
-- `GET /` Listar ventas
-- `GET /{idVenta}` Obtener venta por ID
-- `PUT /{idVenta}` Actualizar venta
-- `DELETE /{idVenta}` Eliminar venta
-
-### Ejemplo de body JSON
-
-```json
-{
-  "direccionCompra": "Av. Principal 123",
-  "valorCompra": 15000,
-  "fechaCompra": "2026-05-17",
-  "despachoGenerado": false
-}
-```
-
-## 6) Documentación Swagger
-
-Al ejecutar la aplicación:
-
-- UI: `http://localhost:8080/swagger-ui.html`
-
-## 7) Variables de entorno requeridas
-
-La app principal usa MySQL por variables de entorno:
-
-- `DB_ENDPOINT`
-- `DB_PORT`
+- `AWS_ACCOUNT_ID`
+- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
+- `AWS_ECR_REPOSITORY`
+- `EC2_INSTANCE_ID`
 - `DB_NAME`
-- `DB_USERNAME`
+- `DB_USER`
 - `DB_PASSWORD`
 
-Ejemplo (Linux/macOS):
+## Etapas del pipeline
 
-```bash
-export DB_ENDPOINT=localhost
-export DB_PORT=3306
-export DB_NAME=ventasdb
-export DB_USERNAME=root
-export DB_PASSWORD=tu_password
-```
+## 1) Build and Push Image (`build-and-push`)
 
-## 8) Cómo ejecutar el proyecto localmente
+Pasos:
 
-### Opción A: con Maven Wrapper
+1. Checkout del repositorio.
+2. Configuración de credenciales AWS.
+3. Login en Amazon ECR.
+4. Build de la imagen Docker con dos tags:
+   - `${github.sha}`
+   - `latest`
+5. Push de ambos tags al repositorio ECR.
 
-1. Ubícate en la raíz del proyecto.
-2. Ejecuta:
+Resultado: imagen disponible en ECR lista para despliegue.
 
-```bash
-./mvnw spring-boot:run
-```
+## 2) Deploy to EC2 via SSM (`deploy-to-ec2`)
 
-La API quedará disponible en `http://localhost:8080`.
+Esta etapa depende de `build-and-push` (`needs: build-and-push`).
 
-### Opción B: empaquetar y ejecutar JAR
+Pasos:
 
-```bash
-./mvnw clean package -DskipTests
-java -jar target/*.jar
-```
+1. Configuración de credenciales AWS para SSM.
+2. Ejecución de `aws ssm send-command` sobre la instancia EC2.
+3. En EC2 se ejecutan comandos para:
+   - crear carpeta de trabajo `/home/ec2-user/backend-ventas`
+   - autenticarse en ECR
+   - descargar imagen `latest`
+   - crear red Docker `api-network` si no existe
+   - detener y eliminar contenedores previos (`springboot-api`, `mysql-db`)
+   - levantar MySQL (`mysql:8.0`) con volumen persistente `mysql_data`
+   - esperar 15 segundos
+   - levantar backend `springboot-api` con variables `DB_*`
+   - limpiar imágenes Docker no utilizadas
 
-## 9) Cómo probar la API
+Resultado: aplicación desplegada en EC2 con MySQL y backend corriendo en contenedores.
 
-Con `curl`:
+## Orden de ejecución
 
-```bash
-curl -X GET http://localhost:8080/api/v1/ventas
-```
+1. `build-and-push`
+2. `deploy-to-ec2`
 
-Crear venta:
+Si falla la primera etapa, la segunda no se ejecuta.
 
-```bash
-curl -X POST http://localhost:8080/api/v1/ventas \
-  -H "Content-Type: application/json" \
-  -d '{
-    "direccionCompra":"Av. Principal 123",
-    "valorCompra":15000,
-    "fechaCompra":"2026-05-17",
-    "despachoGenerado":false
-  }'
-```
+## Resumen operacional
 
-## 10) Tests
-
-Ejecutar tests:
-
-```bash
-./mvnw test
-```
-
-El proyecto incluye:
-
-- Test unitario de servicio con Mockito (`VentaServiceTest`)
-- Test de carga de contexto (`SpringbootApiRestApplicationTests`)
-
-> Nota: el test de contexto (`@SpringBootTest`) puede requerir configuración de datasource si no se activa perfil de test.
-
-## 11) Docker
-
-Construir imagen:
-
-```bash
-docker build -t api-ventas:local .
-```
-
-Ejecutar contenedor:
-
-```bash
-docker run --rm -p 8080:8080 \
-  -e DB_ENDPOINT=host.docker.internal \
-  -e DB_PORT=3306 \
-  -e DB_NAME=ventasdb \
-  -e DB_USERNAME=root \
-  -e DB_PASSWORD=tu_password \
-  api-ventas:local
-```
-
-## 12) CI/CD (GitHub Actions + AWS)
-
-El workflow en `.github/workflows/main.yml` hace lo siguiente al pushear a `main`:
-
-1. Build de la imagen Docker.
-2. Push de imagen a Amazon ECR (tag commit + latest).
-3. Despliegue en EC2 usando AWS SSM:
-   - Crea red Docker si no existe.
-   - Levanta contenedor MySQL.
-   - Levanta contenedor de la API con variables de entorno.
-   - Limpia imágenes no usadas.
-
-Requiere secretos configurados en GitHub (AWS credentials, ECR, EC2 y DB).
-
-## 13) CORS
-
-El controlador usa `@CrossOrigin(origins = "*")`, permitiendo acceso desde cualquier origen.
-
-## 14) Recomendaciones de uso
-
-- Para desarrollo, define variables de entorno antes de iniciar.
-- Verifica Swagger para probar endpoints rápidamente.
-- En producción, restringe CORS y usa manejo seguro de secretos.
+- **CI**: build de imagen Docker y publicación en ECR.
+- **CD**: despliegue remoto en EC2 usando AWS SSM, recreando contenedores de BD y API.
