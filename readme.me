@@ -1,0 +1,205 @@
+# API REST de Ventas
+
+Este proyecto es una API REST desarrollada con **Spring Boot 3** para gestionar ventas.
+Permite crear, consultar, actualizar y eliminar ventas, con persistencia en base de datos y documentación OpenAPI/Swagger.
+
+## 1) Tecnologías utilizadas
+
+- Java 17
+- Spring Boot 3.4.x
+- Spring Web
+- Spring Data JPA
+- Spring Validation
+- MySQL (entorno principal)
+- H2 (tests)
+- Springdoc OpenAPI (Swagger UI)
+- Maven
+- Docker (multi-stage build)
+- GitHub Actions + AWS (ECR/EC2/SSM para despliegue)
+
+## 2) Estructura del proyecto
+
+- `src/main/java/com/citt/controller/VentaController.java`  
+  Expone los endpoints REST en `/api/v1/ventas`.
+- `src/main/java/com/citt/persistence/entity/Venta.java`  
+  Entidad JPA `Venta` con validaciones.
+- `src/main/java/com/citt/persistence/repository/VentaRepository.java`  
+  Repositorio JPA.
+- `src/main/java/com/citt/persistence/services/*`  
+  Lógica de negocio de ventas.
+- `src/main/java/com/citt/exceptions/*`  
+  Excepción personalizada y handler global de errores.
+- `src/main/java/com/citt/config/OpenApiConfing.java`  
+  Configuración de metadatos OpenAPI.
+- `src/main/resources/application.properties`  
+  Configuración principal (MySQL vía variables de entorno).
+- `.github/workflows/main.yml`  
+  Pipeline CI/CD para build, push a ECR y despliegue en EC2 por SSM.
+- `Dockerfile`  
+  Construcción de imagen de la app.
+
+## 3) Modelo de datos
+
+Entidad `Venta`:
+
+- `idVenta` (Long, autogenerado)
+- `direccionCompra` (String, obligatorio)
+- `valorCompra` (int)
+- `fechaCompra` (LocalDate, obligatoria)
+- `despachoGenerado` (Boolean, obligatorio)
+
+## 4) Flujo de funcionamiento
+
+1. El cliente consume endpoints REST en `/api/v1/ventas`.
+2. `VentaController` valida y delega al servicio.
+3. `VentaServiceImpl` aplica la lógica de negocio.
+4. `VentaRepository` persiste/consulta en BD con JPA.
+5. Si no existe una venta, se lanza `VentaNotFoundException`.
+6. `RestResponseEntityExceptionHandler` responde con `404` y mensaje estructurado.
+
+## 5) Endpoints disponibles
+
+Base URL: `http://localhost:8080/api/v1/ventas`
+
+- `POST /` Crear venta
+- `GET /` Listar ventas
+- `GET /{idVenta}` Obtener venta por ID
+- `PUT /{idVenta}` Actualizar venta
+- `DELETE /{idVenta}` Eliminar venta
+
+### Ejemplo de body JSON
+
+```json
+{
+  "direccionCompra": "Av. Principal 123",
+  "valorCompra": 15000,
+  "fechaCompra": "2026-05-17",
+  "despachoGenerado": false
+}
+```
+
+## 6) Documentación Swagger
+
+Al ejecutar la aplicación:
+
+- UI: `http://localhost:8080/swagger-ui.html`
+
+## 7) Variables de entorno requeridas
+
+La app principal usa MySQL por variables de entorno:
+
+- `DB_ENDPOINT`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+
+Ejemplo (Linux/macOS):
+
+```bash
+export DB_ENDPOINT=localhost
+export DB_PORT=3306
+export DB_NAME=ventasdb
+export DB_USERNAME=root
+export DB_PASSWORD=tu_password
+```
+
+## 8) Cómo ejecutar el proyecto localmente
+
+### Opción A: con Maven Wrapper
+
+1. Ubícate en la raíz del proyecto.
+2. Ejecuta:
+
+```bash
+./mvnw spring-boot:run
+```
+
+La API quedará disponible en `http://localhost:8080`.
+
+### Opción B: empaquetar y ejecutar JAR
+
+```bash
+./mvnw clean package -DskipTests
+java -jar target/*.jar
+```
+
+## 9) Cómo probar la API
+
+Con `curl`:
+
+```bash
+curl -X GET http://localhost:8080/api/v1/ventas
+```
+
+Crear venta:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/ventas \
+  -H "Content-Type: application/json" \
+  -d '{
+    "direccionCompra":"Av. Principal 123",
+    "valorCompra":15000,
+    "fechaCompra":"2026-05-17",
+    "despachoGenerado":false
+  }'
+```
+
+## 10) Tests
+
+Ejecutar tests:
+
+```bash
+./mvnw test
+```
+
+El proyecto incluye:
+
+- Test unitario de servicio con Mockito (`VentaServiceTest`)
+- Test de carga de contexto (`SpringbootApiRestApplicationTests`)
+
+> Nota: el test de contexto (`@SpringBootTest`) puede requerir configuración de datasource si no se activa perfil de test.
+
+## 11) Docker
+
+Construir imagen:
+
+```bash
+docker build -t api-ventas:local .
+```
+
+Ejecutar contenedor:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e DB_ENDPOINT=host.docker.internal \
+  -e DB_PORT=3306 \
+  -e DB_NAME=ventasdb \
+  -e DB_USERNAME=root \
+  -e DB_PASSWORD=tu_password \
+  api-ventas:local
+```
+
+## 12) CI/CD (GitHub Actions + AWS)
+
+El workflow en `.github/workflows/main.yml` hace lo siguiente al pushear a `main`:
+
+1. Build de la imagen Docker.
+2. Push de imagen a Amazon ECR (tag commit + latest).
+3. Despliegue en EC2 usando AWS SSM:
+   - Crea red Docker si no existe.
+   - Levanta contenedor MySQL.
+   - Levanta contenedor de la API con variables de entorno.
+   - Limpia imágenes no usadas.
+
+Requiere secretos configurados en GitHub (AWS credentials, ECR, EC2 y DB).
+
+## 13) CORS
+
+El controlador usa `@CrossOrigin(origins = "*")`, permitiendo acceso desde cualquier origen.
+
+## 14) Recomendaciones de uso
+
+- Para desarrollo, define variables de entorno antes de iniciar.
+- Verifica Swagger para probar endpoints rápidamente.
+- En producción, restringe CORS y usa manejo seguro de secretos.
