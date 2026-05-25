@@ -2,7 +2,7 @@ name: Build, Push and Deploy via SSM
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "deploy" ]
 
 # Definiadsmos aalasdsadaaa URasdasdL del Registry como una variable de entorno global
 env:
