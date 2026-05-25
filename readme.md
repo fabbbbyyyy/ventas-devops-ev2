@@ -1,4 +1,4 @@
-# Flujo CI/CD
+# Flujo CI/CD.
 
 Este repositorio usa el workflow **`.github/workflows/main.yml`** para construir, publicar y desplegar la aplicación automáticamente.
 
