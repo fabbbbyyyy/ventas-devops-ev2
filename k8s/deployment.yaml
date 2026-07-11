@@ -26,19 +26,19 @@ spec:
               memory: "256Mi"
           readinessProbe:
             tcpSocket:
-              port: 8081
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 3
           livenessProbe:
             tcpSocket:
-              port: 8081
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 5
           startupProbe:
             tcpSocket:
-              port: 8081
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 30
